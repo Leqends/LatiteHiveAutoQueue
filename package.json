@@ -1,0 +1,7 @@
+{
+  "name": "LatiteHiveAutoQueue",
+  "version": "1.0.0",
+  "devDependencies": {
+    "@latitescripting/latiteapi": "^2.1.1"
+  }
+}
