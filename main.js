@@ -1,73 +1,73 @@
-//@ts-check
 "use strict";
 
 // Setup
-let hiveAutoQueue = new Module("HiveAutoQueue",
-    "Hive Auto Queue", "A plugin to automatically queue into the next game in Hive");
+let hiveAutoQueue = new Module("LatiteHiveAutoQueue", "Hive Auto Queue", "Automatically queue to the next game", 0);
+client.getModuleManager().registerModule(hiveAutoQueue);
 
-// This adds the input box for which maps to dodge
-let mapDodger = new hiveAutoQueue.addTextSetting("mapDodger",
-    "Map Dodge List", "The map to dodge", "");
+// Input box for map dodging
+let mapDodger = hiveAutoQueue.addTextSetting("mapDodger", "Map Dodge List", "The map to dodge", " ");
 
 // Current game mode
 let gameMode = null;
 
-let partyMembers = new hiveAutoQueue.addTextSetting("partyMembers",
-    "Party Members", "The members of the party, this is automatically managed", "");
-
+// Party settings
+let partyMembers = [];
 let deadMembers = [];
 let aliveMembers = [];
 
-client.getModuleManager().registerModule(hiveAutoQueue);
+let pluginSentCmd = false;
 
 /**
- * Function to find the current game mode by using connection command
- * and listening to the chat message provided by the command to get the game
+ * Function to find the current game mode by using /connection command
+ * and extract game mode from the chat response.
  */
 function findGamemode() {
     game.executeCommand("/connection");
+    pluginSentCmd = true;
 
     client.on("receive-chat", chat => {
         let message = chat.message;
-        if(chat.sender === "") {
-            chat.cancel = message.includes("You are connected to public IP") ||
-                message.includes("You are connected to internal IP");
 
-            if(message.includes("You are connected to server name")) {
-                chat.cancel = true;
-                gameMode = message.split("You are connected to server name")[1];
-                gameMode = gameMode.replace(/\d+/g,"").trim();
-            } else {
-                chat.cancel = false;
-            }
-
+        if (chat.sender === "" && message.includes("You are connected to server name")) {
+            chat.cancel = true;
+            gameMode = message.split("You are connected to server name")[1].replace(/\d+/g, "").trim();
+            queueNextGame();
+            pluginSentCmd = false;
+        } else {
             chat.cancel = message.includes("You are connected to server");
         }
     });
 }
 
 /**
- * Function to queue into the next game
+ * Function to queue into the next game.
  */
 function queueNextGame() {
-    if(!gameMode) {
+    if (gameMode) {
         game.executeCommand("/q " + gameMode);
+    } else {
+        script.log("[LatiteHiveAutoQueue] Game mode not found, failed to queue");
     }
 }
 
 /**
- * Function to find the party members
+ * Function to find the party members using /party list command.
  */
 function findPartyMembers() {
-    game.executeCommand("/party list");
-
-    /**
-     * TODO: Detection of party members
-     */
-
+    // TODO: Find out why it isn't working
+    game.executeCommand("/p list");
+    script.log("[LatiteHiveAutoQueue] Finding party members");
     client.on("receive-chat", chat => {
         let message = chat.message;
-        if(chat.sender === "") {
+
+        if (chat.sender === "") {
+            let listOfColorsToAvoid = ["§b", "§c", "§d", "§e", "§f", "§k", "§l", "§m", "§n", "§o", "§r",
+                "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9"];
+            if(message.includes("§a") && !listOfColorsToAvoid.includes(message.substring(0, 2))) {
+                let partyMember = message.split("§a")[1].split(" ")[0];
+                partyMembers.push(partyMember);
+                script.log("[LatiteHiveAutoQueue] Found party members: " + partyMember);
+            }
             chat.cancel = message.includes("You're issuing commands too quickly, try again later.") ||
                 message.includes("Unknown command. Sorry!");
         }
@@ -75,53 +75,59 @@ function findPartyMembers() {
 }
 
 /**
- * Listen for title content to detect if the game is over
+ * Listen for title content to detect if the game is over and queue the next game.
  */
 client.on("title", title => {
-   let titleText = title.text;
-   let server = game.getFeaturedServer();
-   if(hiveAutoQueue.isEnabled()) {
-       if(server.includes("hive")) {
-           /**
-            * TODO: Check if the player is solo and queue if the player is dead
-            */
-           if (titleText.includes("Over") || titleText.includes("Victory")) {
-               queueNextGame();
-           }
-       }
-   }
-});
+    if (!hiveAutoQueue.isEnabled()) return;
 
-client.on("receive-chat", chat => {
-    let message = chat.message;
-    let mapDodgerArray = mapDodger.getValue().split(",");
-    if(hiveAutoQueue.isEnabled()) {
-        if (chat.sender === "") {
+    let titleText = title.text;
+    let server = game.getFeaturedServer().toLowerCase();
 
-            /**
-             * TODO: Do party death detection
-             */
-            if (message.includes("won with") && message.includes("votes!")) {
-                let mapName = message.split(" ")[1];
-                for (let i = 0; i < mapDodgerArray.length; i++) {
-                    if (mapName === mapDodgerArray[i]) {
-                        queueNextGame();
-                    }
-                }
-            }
+    if (server.includes("hive")) {
+        if (titleText.includes("Over") || titleText.includes("Victory") || titleText.includes("Game Over") || titleText.includes("Sweet Victory")) {
+            queueNextGame();
         }
     }
 });
 
-client.on("change-dimension", chat => {
-    if(hiveAutoQueue.isEnabled()) {
+/**
+ * Handle chat messages for map dodging and party member updates.
+ */
+client.on("receive-chat", chat => {
+    if (!hiveAutoQueue.isEnabled()) return;
+
+    let message = chat.message;
+    let mapDodgerArray = mapDodger.getValue().split(",");
+
+    if (chat.sender === "") {
+        // Map Dodging Logic
+        if (message.includes("won with") && message.includes("votes!")) {
+            let mapName = message.split(" ")[1];
+            if (mapDodgerArray.includes(mapName)) {
+                queueNextGame();
+            }
+        }
+
+        // Suppress command-related messages
+        if (message.includes("You are connected to public") || message.includes("You are connected to internal")) {
+            chat.cancel = pluginSentCmd;
+        }
+    }
+
+});
+
+/**
+ * Handle dimension change event to find the new game mode.
+ */
+client.on("change-dimension", () => {
+    if (hiveAutoQueue.isEnabled()) {
         findGamemode();
+
         client.on("receive-chat", chat => {
             let message = chat.message;
-            if (chat.sender === "") {
-                chat.cancel = message.includes("You're issuing commands too quickly, try again later.") ||
-                    message.includes("Unknown command. Sorry!");
-            }
+            chat.cancel = message.includes("IP") ||
+                message.includes("You're issuing commands too quickly, try again later.") ||
+                message.includes("Unknown command. Sorry!");
         });
     }
 });
