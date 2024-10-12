@@ -31,6 +31,7 @@ function findGamemode() {
         if (chat.sender === "" && message.includes("You are connected to server name")) {
             chat.cancel = true;
             gameMode = message.split("You are connected to server name")[1].replace(/\d+/g, "").trim();
+            script.log("[LatiteHiveAutoQueue] Detected Game: " + gameMode);
             queueNextGame();
             pluginSentCmd = false;
         } else {
@@ -102,9 +103,12 @@ client.on("receive-chat", chat => {
     if (chat.sender === "") {
         // Map Dodging Logic
         if (message.includes("won with") && message.includes("votes!")) {
-            let mapName = message.split(" ")[1];
-            if (mapDodgerArray.includes(mapName)) {
-                queueNextGame();
+        let mapName = message.split(" ")[1];
+        script.log("[LatiteHiveAutoQueue] Found Map: " + mapName);
+            for (const element of mapDodgerArray) {
+                if (mapName.includes(element) && element !== "") {
+                    queueNextGame();
+                }
             }
         }
 
