@@ -5,8 +5,8 @@ let hiveAutoQueue = new Module("LatiteHiveAutoQueue", "Hive Auto Queue", "Automa
 client.getModuleManager().registerModule(hiveAutoQueue);
 
 // Input box for map dodging
-let mapDodger = hiveAutoQueue.addTextSetting("mapDodger", "Map Dodge List", "The map to dodge", " ");
-
+let mapDodger = hiveAutoQueue.addTextSetting("mapDodger", "Map Dodge List", "The maps to dodge", " ");
+let debugMode = hiveAutoQueue.addBoolSetting("debugMode", "Debug Mode", "Shows all the logs, useful for people trying understand the code", false);
 // Current game mode
 let gameMode = null;
 
@@ -17,6 +17,12 @@ let aliveMembers = [];
 
 let pluginSentCmd = false;
 
+
+function log(message) {
+    if (debugMode.getValue()) {
+        script.log("[LatiteHiveAutoQueue] " + message);
+    }
+}
 /**
  * Function to find the current game mode by using /connection command
  * and extract game mode from the chat response.
@@ -31,7 +37,7 @@ function findGamemode() {
         if (chat.sender === "" && message.includes("You are connected to server name")) {
             chat.cancel = true;
             gameMode = message.split("You are connected to server name")[1].replace(/\d+/g, "").trim();
-            script.log("[LatiteHiveAutoQueue] Detected Game: " + gameMode);
+            log("[LatiteHiveAutoQueue] Detected Game: " + gameMode);
             queueNextGame();
             pluginSentCmd = false;
         } else {
@@ -57,7 +63,7 @@ function queueNextGame() {
 function findPartyMembers() {
     // TODO: Find out why it isn't working
     game.executeCommand("/p list");
-    script.log("[LatiteHiveAutoQueue] Finding party members");
+    log("Finding party members");
     client.on("receive-chat", chat => {
         let message = chat.message;
 
@@ -67,7 +73,7 @@ function findPartyMembers() {
             if(message.includes("§a") && !listOfColorsToAvoid.includes(message.substring(0, 2))) {
                 let partyMember = message.split("§a")[1].split(" ")[0];
                 partyMembers.push(partyMember);
-                script.log("[LatiteHiveAutoQueue] Found party members: " + partyMember);
+                log("Found party members: " + partyMember);
             }
             chat.cancel = message.includes("You're issuing commands too quickly, try again later.") ||
                 message.includes("Unknown command. Sorry!");
@@ -104,7 +110,7 @@ client.on("receive-chat", chat => {
         // Map Dodging Logic
         if (message.includes("won with") && message.includes("votes!")) {
         let mapName = message.split(" ")[1];
-        script.log("[LatiteHiveAutoQueue] Found Map: " + mapName);
+        log("Found Map: " + mapName);
             for (const element of mapDodgerArray) {
                 if (mapName.includes(element) && element !== "") {
                     queueNextGame();
