@@ -23,6 +23,7 @@ function log(message) {
         script.log("[LatiteHiveAutoQueue] " + message);
     }
 }
+
 /**
  * Function to find the current game mode by using /connection command
  * and extract game mode from the chat response.
@@ -37,7 +38,7 @@ function findGamemode() {
         if (chat.sender === "" && message.includes("You are connected to server name")) {
             chat.cancel = true;
             gameMode = message.split("You are connected to server name")[1].replace(/\d+/g, "").trim();
-            log("[LatiteHiveAutoQueue] Detected Game: " + gameMode);
+            log("Detected Game: " + gameMode);
             queueNextGame();
             pluginSentCmd = false;
         } else {
