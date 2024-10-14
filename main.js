@@ -6,7 +6,8 @@ client.getModuleManager().registerModule(hiveAutoQueue);
 
 // Input box for map dodging
 let mapDodger = hiveAutoQueue.addTextSetting("mapDodger", "Map Dodge List", "The maps to dodge", " ");
-let debugMode = hiveAutoQueue.addBoolSetting("debugMode", "Debug Mode", "Shows all the logs, useful for people trying understand the code", false);
+let showNotification = hiveAutoQueue.addBoolSetting("showNotification", "Show Plugin Notifications",
+    "Show's all the plugin notification", true);
 // Current game mode
 let gameMode = null;
 
@@ -16,14 +17,13 @@ let deadMembers = [];
 let aliveMembers = [];
 
 let pluginSentCmd = false;
+const COLOR_CODE = '\u00A7'; // Unicode for §
 
-
-function log(message) {
-    if (debugMode.getValue()) {
-        script.log("[LatiteHiveAutoQueue] " + message);
+function sendNotification(message) {
+    if(showNotification.getValue()) {
+        client.showNotification(message);
     }
 }
-
 /**
  * Function to find the current game mode by using /connection command
  * and extract game mode from the chat response.
@@ -38,7 +38,7 @@ function findGamemode() {
         if (chat.sender === "" && message.includes("You are connected to server name")) {
             chat.cancel = true;
             gameMode = message.split("You are connected to server name")[1].replace(/\d+/g, "").trim();
-            log("Detected Game: " + gameMode);
+            sendNotification("Found game mode: " + gameMode);
             queueNextGame();
             pluginSentCmd = false;
         } else {
@@ -48,39 +48,61 @@ function findGamemode() {
 }
 
 /**
+ * Function to find the party members using /party list command.
+ */
+function findPartyMembers() {
+    let collectingMembers = false; // Flag to track if we are collecting members
+
+    game.executeCommand("/p list");
+
+    client.on("receive-chat", chat => {
+        let message = chat.message.trim();
+
+        if (chat.sender === "") {
+
+            // Start collecting after we hit the "Members" line
+            if (message.includes("Members")) {
+                collectingMembers = true;
+            }
+
+            if(collectingMembers) {
+
+                // Check if the message isn't 'Members' (Shouldn't affect the collecting members flag)
+                if(message === "Members") return;
+
+                if (message.startsWith(COLOR_CODE + '7') || message.startsWith(COLOR_CODE + 'a')) {
+                    if(!message.substring(2).includes(COLOR_CODE)) {
+                        sendNotification("Found party member: " + message.substring(2));
+
+                        if(!partyMembers.includes(message.substring(2))) {
+                            partyMembers.push(message.substring(2));
+                        }
+
+                    } else {
+                        collectingMembers = false;
+                    }
+                }
+            }
+
+            // Handle specific chat cancellation cases
+            chat.cancel = message.includes("You're issuing commands too quickly, try again later.") ||
+                message.includes("Unknown command. Sorry!");
+        }
+    });
+}
+
+
+/**
  * Function to queue into the next game.
  */
 function queueNextGame() {
     if (gameMode) {
         game.executeCommand("/q " + gameMode);
     } else {
-        script.log("[LatiteHiveAutoQueue] Game mode not found, failed to queue");
+        client.showNotification("Game mode not found. Please try again.");
     }
 }
 
-/**
- * Function to find the party members using /party list command.
- */
-function findPartyMembers() {
-    // TODO: Find out why it isn't working
-    game.executeCommand("/p list");
-    log("Finding party members");
-    client.on("receive-chat", chat => {
-        let message = chat.message;
-
-        if (chat.sender === "") {
-            let listOfColorsToAvoid = ["§b", "§c", "§d", "§e", "§f", "§k", "§l", "§m", "§n", "§o", "§r",
-                "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9"];
-            if(message.includes("§a") && !listOfColorsToAvoid.includes(message.substring(0, 2))) {
-                let partyMember = message.split("§a")[1].split(" ")[0];
-                partyMembers.push(partyMember);
-                log("Found party members: " + partyMember);
-            }
-            chat.cancel = message.includes("You're issuing commands too quickly, try again later.") ||
-                message.includes("Unknown command. Sorry!");
-        }
-    });
-}
 
 /**
  * Listen for title content to detect if the game is over and queue the next game.
@@ -93,6 +115,7 @@ client.on("title", title => {
 
     if (server.includes("hive")) {
         if (titleText.includes("Over") || titleText.includes("Victory") || titleText.includes("Game Over") || titleText.includes("Sweet Victory")) {
+            sendNotification("Game Over! Queuing next game...");
             queueNextGame();
         }
     }
@@ -111,9 +134,9 @@ client.on("receive-chat", chat => {
         // Map Dodging Logic
         if (message.includes("won with") && message.includes("votes!")) {
         let mapName = message.split(" ")[1];
-        log("Found Map: " + mapName);
             for (const element of mapDodgerArray) {
                 if (mapName.includes(element) && element !== "") {
+                    sendNotification("Dodging map: " + mapName);
                     queueNextGame();
                 }
             }
